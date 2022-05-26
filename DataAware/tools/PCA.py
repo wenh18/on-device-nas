@@ -61,7 +61,7 @@ def ipca(input_data_file,save_data_file,train=False):
   batch_size = 1000
   fit_iter = 0
   if train:
-    ipca = IncrementalPCA(n_components=2, batch_size=batch_size)
+    ipca = IncrementalPCA(n_components=256, batch_size=batch_size)
     for batch_img_output in batch_img_read(input_data_file, batch_size=batch_size):
       if (batch_img_output.shape[0] == batch_size):
           ipca.partial_fit(batch_img_output)

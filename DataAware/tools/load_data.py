@@ -17,6 +17,7 @@ from PIL import Image
 sys.path.append(os.getcwd())
 
 from tools.generate_dis import generate_idxs
+from tools.valdata_idx import get_val_idx
 import torchvision.transforms as transforms
 
 class CIFAR100_DOUBLELABEL(datasets.CIFAR100):
@@ -41,13 +42,32 @@ class CIFAR100_DOUBLELABEL(datasets.CIFAR100):
 
         self.data: Any = []
         self.targets = []
-        self.expert_label = []
+
+        ## resnet50
+        # self.layer40downsample = []
+        # self.layer41conv1 = []
+        # self.layer41conv2 = []
+        # self.layer41conv3 = []
+        # self.layer42conv1 = []
+        # self.layer42conv2 = []
+        # self.layer42conv3 = []
+        
+        ##resnet20
+        self.layer30downsample1 = []
+        self.layer31conv1 = []
+        self.layer31conv2 = []
+        self.layer32conv1 = []
+        self.layer32conv2 = []
+        
+
+        ##vgg19
+        #self.vgg_label = []
 
         # now load the picked numpy arrays
         if self.train:
-            file_path = '/root/resnet20/tmp/expert_train'
+            file_path = '/root/resnet20/tmp_resnet20/expert_train'
         else:
-            file_path = '/root/resnet20/tmp/expert_test'
+            file_path = '/root/resnet20/tmp_resnet20/expert_test'
         with open(file_path, 'rb') as f:
             entry = pickle.load(f, encoding='latin1')
             self.data.append(entry['data'])
@@ -56,7 +76,21 @@ class CIFAR100_DOUBLELABEL(datasets.CIFAR100):
             else:
                 self.targets.extend(entry['fine_labels'])
 
-            self.expert_label.extend(entry['expert_label'])
+            # self.layer40downsample.extend(entry['layer40downsample'])
+            # self.layer41conv1.extend(entry['layer41conv1'])
+            # self.layer41conv2.extend(entry['layer41conv2'])
+            # self.layer41conv3.extend(entry['layer41conv3'])
+            # self.layer42conv1.extend(entry['layer42conv1'])
+            # self.layer42conv2.extend(entry['layer42conv2'])
+            # self.layer42conv3.extend(entry['layer42conv3'])
+
+            self.layer30downsample1.extend(entry['layer30downsample1'])
+            self.layer31conv1.extend(entry['layer31conv1'])
+            self.layer31conv2.extend(entry['layer31conv2'])
+            self.layer32conv1.extend(entry['layer32conv1'])
+            self.layer32conv2.extend(entry['layer32conv2'])
+
+            #self.vgg_label.extend(entry['vgg_label'])
 
         self.data = np.vstack(self.data).reshape(-1, 3, 32, 32)
         self.data = self.data.transpose((0, 2, 3, 1))  # convert to HWC
@@ -82,7 +116,11 @@ class CIFAR100_DOUBLELABEL(datasets.CIFAR100):
 
         if self.target_transform is not None:
             target = self.target_transform(target)
-        target = list((target,self.expert_label[index]))
+        target = list((target, self.layer30downsample1[index],self.layer31conv1[index],self.layer31conv2[index],
+                        self.layer32conv1[index],self.layer32conv2[index]))
+        # target = list((target, self.layer40downsample[index],self.layer41conv1[index],self.layer41conv2[index],
+        #             self.layer41conv3[index],self.layer42conv1[index],self.layer42conv2[index],self.layer42conv3[index]))
+        #target = list((target,self.vgg_label[index]))
         return img, target
 
 
@@ -116,38 +154,41 @@ def load_data(batch_size=512,num_expert=10,num_class=100,workers=14):
             transforms.ToTensor(),
             normalize,
         ])),
-        batch_size=10000, shuffle=False,
+        batch_size=batch_size, shuffle=False,
         num_workers=workers, pin_memory=True)
     return train_loader, val_loader
 
-def load_dis_data(batch_size=512,num_class=10,workers=14):
-
+def load_dis_data(batch_size=512,workers=14,train=True,index=0):
     normalize = transforms.Normalize(mean=[0.507, 0.4865, 0.4409],
                                      std=[0.2673, 0.2564, 0.2761])
-    CIFAR100_TRAIN = CIFAR100_DOUBLELABEL(root=r'/root/resnet20/cifar-100-python', train=True, transform=transforms.Compose([
+    if train:
+        CIFAR100_TRAIN = CIFAR100_DOUBLELABEL(root=r'/root/resnet20/cifar-100-python', train=True, transform=transforms.Compose([
             transforms.RandomCrop(32, 4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
         ]), download=True)
-    CIFAR100_TEST = CIFAR100_DOUBLELABEL(root=r'/root/resnet20/cifar-100-python', train=False, transform=transforms.Compose([
+        train_idxs = generate_idxs(batchsize=batch_size,train=True)
+        train_sampler = mysampler(CIFAR100_TRAIN)
+        train_sampler.set_idxs(train_idxs)
+        loader = torch.utils.data.DataLoader(
+                        CIFAR100_TRAIN,
+                        batch_size=batch_size, shuffle=False,
+                        sampler=train_sampler,
+                        num_workers=workers, pin_memory=True)
+    else:
+        CIFAR100_TEST = CIFAR100_DOUBLELABEL(root=r'/root/resnet20/cifar-100-python', train=False, transform=transforms.Compose([
             transforms.ToTensor(),
             normalize,
         ]), download=True) 
-    train_idxs = generate_idxs(train=True,batchsize=batch_size,num_class=num_class)
-    test_idxs = generate_idxs(train=False,batchsize=10000,num_class=num_class)  
-    train_sampler = mysampler(CIFAR100_TRAIN)
-    train_sampler.set_idxs(train_idxs)
-    test_sampler = mysampler(CIFAR100_TEST)
-    test_sampler.set_idxs(test_idxs)
-    train_loader = torch.utils.data.DataLoader(
-        CIFAR100_TRAIN,
-        batch_size=batch_size, shuffle=False,
-        sampler=train_sampler,
-        num_workers=workers, pin_memory=True)
-    val_loader = torch.utils.data.DataLoader(
-        CIFAR100_TEST,
-        batch_size=10000, shuffle=False,
-        sampler=test_sampler,
-        num_workers=workers, pin_memory=True)
-    return train_loader,val_loader
+        #test_idxs = generate_idxs(batchsize=10000,num_class=100,train=False)  
+        test_idxs = get_val_idx(index)
+        test_sampler = mysampler(CIFAR100_TEST)
+        test_sampler.set_idxs(test_idxs)
+        loader = torch.utils.data.DataLoader(
+                        CIFAR100_TEST,
+                        batch_size=10000, shuffle=False,
+                        sampler=test_sampler,
+                        num_workers=workers, pin_memory=True)
+                        
+    return loader

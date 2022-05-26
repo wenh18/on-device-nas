@@ -10,7 +10,7 @@ import pickle
 
 def k_means(x,k_means_file='/root/resnet20/tmp/k_means.pkl',n_clusters=10,train=True):
     if train:
-        k_means = KMeans(n_clusters=10)
+        k_means = KMeans(n_clusters=n_clusters)
         k_means.fit(x)
         with open(k_means_file, 'wb') as pickle_file:
             pickle.dump(k_means, pickle_file)     
